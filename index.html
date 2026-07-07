@@ -23,7 +23,40 @@
             كل مربع يمثل ملف شخص لديه دعوى. اضغط على الملف لفتح التصنيفات.
           </p>
         </header>
-        <div id="folders-grid" class="grid grid-folders"></div>
+        <div id="folders-grid" class="grid grid-folders">
+          <article class="card folder-accent-1">
+            <button class="card-button" type="button" data-folder-slug="patrick-sayf">
+              <div class="folder-icon">📁</div>
+              <h2>باتريك سيف</h2>
+              <p>دعوى مع الخصم</p>
+              <span class="badge">ملف ١</span>
+            </button>
+          </article>
+          <article class="card folder-accent-2">
+            <button class="card-button" type="button" data-folder-slug="folder-2">
+              <div class="folder-icon">📁</div>
+              <h2>ملف ٢</h2>
+              <p>دعوى مع الخصم</p>
+              <span class="badge">ملف ٢</span>
+            </button>
+          </article>
+          <article class="card folder-accent-3">
+            <button class="card-button" type="button" data-folder-slug="folder-3">
+              <div class="folder-icon">📁</div>
+              <h2>ملف ٣</h2>
+              <p>دعوى مع الخصم</p>
+              <span class="badge">ملف ٣</span>
+            </button>
+          </article>
+          <article class="card folder-accent-4">
+            <button class="card-button" type="button" data-folder-slug="folder-4">
+              <div class="folder-icon">📁</div>
+              <h2>ملف ٤</h2>
+              <p>دعوى مع الخصم</p>
+              <span class="badge">ملف ٤</span>
+            </button>
+          </article>
+        </div>
         <p id="folders-status" class="status"></p>
       </section>
 
@@ -54,7 +87,6 @@
     </main>
 
     <script src="/config.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="/app.js"></script>
+    <script src="/app.js" defer></script>
   </body>
 </html>
