@@ -102,6 +102,7 @@
     dom.backToCategories = document.getElementById("back-to-categories");
     dom.saveComplaint = document.getElementById("save-complaint");
     dom.clearComplaint = document.getElementById("clear-complaint");
+    dom.refreshFiles = document.getElementById("refresh-files");
   }
 
   function loadSupabaseScript() {
@@ -321,7 +322,7 @@
   function renderFileList(files) {
     if (!files || !files.length) {
       dom.fileList.innerHTML =
-        '<li class="file-item"><span class="file-meta"><span class="file-name">لا توجد ملفات مرفوعة بعد.</span></span></li>';
+        '<li class="file-item"><span class="file-meta"><span class="file-name">لا توجد ملفات بعد.</span><span class="file-size">اضغط على «رفع الملفات» أعلاه أو اسحب الملفات إلى المربع.</span></span></li>';
       return;
     }
 
@@ -360,7 +361,7 @@
     setDetailStatus("جارٍ تحميل الملفات...");
     var prefix = getCategoryPrefix();
 
-    return fetch("/api/files?prefix=" + encodeURIComponent(prefix))
+    return fetch("/api/files?prefix=" + encodeURIComponent(prefix) + "&t=" + Date.now())
       .then(function (response) {
         return response.json().then(function (body) {
           return { ok: response.ok, body: body };
@@ -385,7 +386,9 @@
         });
 
         renderFileList(files);
-        if (!files.length) {
+        if (files.length) {
+          setDetailStatus("عدد الملفات: " + files.length, "success");
+        } else {
           setDetailStatus("");
         }
       })
@@ -695,6 +698,7 @@
 
     dom.saveComplaint.addEventListener("click", saveComplaint);
     dom.clearComplaint.addEventListener("click", clearComplaint);
+    dom.refreshFiles.addEventListener("click", loadCategoryFiles);
   }
 
   function boot() {
