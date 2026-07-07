@@ -1,8 +1,12 @@
 const BUCKET = "legal-case-files";
+const DEFAULT_SUPABASE_URL = "https://fzkdywytihenesxcaqfg.supabase.co";
 
 function getEnv() {
   return {
-    url: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "",
+    url:
+      process.env.SUPABASE_URL ||
+      process.env.VITE_SUPABASE_URL ||
+      DEFAULT_SUPABASE_URL,
     serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
   };
 }
