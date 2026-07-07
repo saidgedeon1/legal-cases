@@ -293,6 +293,25 @@
     return result.data.publicUrl;
   }
 
+  function getCategoryPrefix() {
+    return selectedFolder.slug + "/" + selectedCategory.id;
+  }
+
+  function displayFileName(storageName) {
+    var parts = String(storageName).split("-");
+    if (parts.length > 2 && /^\d+$/.test(parts[0])) {
+      return parts.slice(2).join("-");
+    }
+    return storageName;
+  }
+
+  function storageSetupMessage() {
+    return (
+      "يجب تشغيل supabase/setup-all.sql مرة واحدة في Supabase SQL Editor. " +
+      "افتح: supabase.com/dashboard/project/fzkdywytihenesxcaqfg/sql/new"
+    );
+  }
+
   function renderFileList(files) {
     if (!files || !files.length) {
       dom.fileList.innerHTML =
@@ -304,9 +323,7 @@
       .map(function (file) {
         var url = getPublicFileUrl(file.storage_path);
         return (
-          '<li class="file-item" data-file-id="' +
-          file.id +
-          '">' +
+          '<li class="file-item">' +
           '<div class="file-meta">' +
           '<span class="file-name">' +
           file.file_name +
@@ -319,9 +336,7 @@
           '<a class="link-btn" href="' +
           url +
           '" target="_blank" rel="noopener">فتح</a>' +
-          '<button class="danger-btn" type="button" data-delete-file="' +
-          file.id +
-          '" data-storage-path="' +
+          '<button class="danger-btn" type="button" data-storage-path="' +
           file.storage_path +
           '">حذف</button>' +
           "</div>" +
@@ -338,26 +353,48 @@
 
     if (!supabase) {
       renderFileList([]);
-      setDetailStatus("شغّل supabase/schema.sql في Supabase لرفع الملفات.", "error");
+      setDetailStatus(storageSetupMessage(), "error");
       return Promise.resolve();
     }
 
     setDetailStatus("جارٍ تحميل الملفات...");
+    var prefix = getCategoryPrefix();
 
-    return supabase
-      .from("case_files")
-      .select("id, file_name, storage_path, mime_type, size_bytes, created_at")
-      .eq("folder_slug", selectedFolder.slug)
-      .eq("category_id", selectedCategory.id)
-      .order("created_at", { ascending: false })
+    return supabase.storage
+      .from(STORAGE_BUCKET)
+      .list(prefix, {
+        limit: 100,
+        offset: 0,
+        sortBy: { column: "created_at", order: "desc" },
+      })
       .then(function (result) {
         if (result.error) {
           renderFileList([]);
-          setDetailStatus("تعذر تحميل الملفات: " + result.error.message, "error");
+          var message = result.error.message || "";
+          if (
+            message.indexOf("Bucket not found") !== -1 ||
+            message.indexOf("bucket") !== -1
+          ) {
+            setDetailStatus(storageSetupMessage(), "error");
+          } else {
+            setDetailStatus("تعذر تحميل الملفات: " + message, "error");
+          }
           return;
         }
 
-        renderFileList(result.data || []);
+        var files = (result.data || [])
+          .filter(function (item) {
+            return item && item.name && item.metadata;
+          })
+          .map(function (item) {
+            return {
+              file_name: displayFileName(item.name),
+              storage_path: prefix + "/" + item.name,
+              size_bytes: (item.metadata && item.metadata.size) || 0,
+            };
+          });
+
+        renderFileList(files);
         setDetailStatus("");
       });
   }
@@ -370,7 +407,7 @@
       return;
     }
     if (!supabase) {
-      setDetailStatus("شغّل supabase/schema.sql في Supabase لرفع الملفات.", "error");
+      setDetailStatus(storageSetupMessage(), "error");
       return;
     }
 
@@ -411,36 +448,17 @@
         .then(function (uploadResult) {
           if (uploadResult.error) {
             failed += 1;
-            uploadNext(index + 1);
-            return;
+          } else {
+            uploaded += 1;
           }
-
-          supabase
-            .from("case_files")
-            .insert({
-              folder_id: selectedFolder.id || null,
-              folder_slug: selectedFolder.slug,
-              category_id: selectedCategory.id,
-              file_name: file.name,
-              storage_path: storagePath,
-              mime_type: file.type || null,
-              size_bytes: file.size || 0,
-            })
-            .then(function (dbResult) {
-              if (dbResult.error) {
-                failed += 1;
-              } else {
-                uploaded += 1;
-              }
-              uploadNext(index + 1);
-            });
+          uploadNext(index + 1);
         });
     }
 
     uploadNext(0);
   }
 
-  function deleteFile(fileId, storagePath) {
+  function deleteFile(storagePath) {
     if (!supabase) {
       setDetailStatus("لا يمكن الحذف بدون Supabase.", "error");
       return;
@@ -455,9 +473,6 @@
     supabase.storage
       .from(STORAGE_BUCKET)
       .remove([storagePath])
-      .then(function () {
-        return supabase.from("case_files").delete().eq("id", fileId);
-      })
       .then(function (result) {
         if (result.error) {
           setDetailStatus("تعذر حذف الملف: " + result.error.message, "error");
@@ -648,14 +663,11 @@
     });
 
     dom.fileList.addEventListener("click", function (event) {
-      var button = event.target.closest("[data-delete-file]");
+      var button = event.target.closest("[data-storage-path]");
       if (!button) {
         return;
       }
-      deleteFile(
-        button.getAttribute("data-delete-file"),
-        button.getAttribute("data-storage-path"),
-      );
+      deleteFile(button.getAttribute("data-storage-path"));
     });
 
     dom.backToFolders.addEventListener("click", function () {
