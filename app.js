@@ -89,10 +89,28 @@ function getConfig() {
 
 function initSupabase() {
   const { supabaseUrl, supabaseAnonKey } = getConfig();
-  if (!supabaseUrl || !supabaseAnonKey || !window.supabase) {
+  const lib = window.supabase;
+  const createClient = lib?.createClient;
+
+  if (!supabaseUrl || !supabaseAnonKey || typeof createClient !== "function") {
     return null;
   }
-  return window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+
+  try {
+    return createClient(supabaseUrl, supabaseAnonKey);
+  } catch (error) {
+    console.error("[legal-cases] Supabase init failed:", error);
+    return null;
+  }
+}
+
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error("timeout")), ms);
+    }),
+  ]);
 }
 
 function showView(view) {
@@ -172,36 +190,51 @@ function renderCategories(folder) {
 }
 
 async function loadFolders() {
-  foldersStatus.textContent = "جارٍ تحميل الملفات...";
+  folders = DEFAULT_FOLDERS;
+  renderFolders();
+  foldersStatus.textContent = "";
   foldersStatus.className = "status";
 
   if (!supabase) {
-    folders = DEFAULT_FOLDERS;
     foldersStatus.textContent = "وضع محلي — شغّل schema.sql في Supabase للربط الكامل.";
-    renderFolders();
     return;
   }
 
-  const { data, error } = await supabase
-    .from("case_folders")
-    .select("id, slug, name, opponent, case_ref, sort_order, accent")
-    .order("sort_order", { ascending: true });
+  foldersStatus.textContent = "جارٍ مزامنة الملفات من Supabase...";
 
-  if (error) {
-    folders = DEFAULT_FOLDERS;
+  try {
+    const { data, error } = await withTimeout(
+      supabase
+        .from("case_folders")
+        .select("id, slug, name, opponent, case_ref, sort_order, accent")
+        .order("sort_order", { ascending: true }),
+      8000,
+    );
+
+    if (error) {
+      foldersStatus.textContent =
+        "تعذر الاتصال بقاعدة البيانات. تأكد من تشغيل supabase/schema.sql في لوحة Supabase.";
+      foldersStatus.className = "status error";
+      return;
+    }
+
+    if (Array.isArray(data) && data.length > 0) {
+      folders = data;
+      renderFolders();
+      foldersStatus.textContent = "تم تحميل الملفات من Supabase.";
+      foldersStatus.className = "status success";
+      return;
+    }
+
+    foldersStatus.textContent = "لا توجد ملفات في Supabase بعد — يتم عرض الملفات الافتراضية.";
+    foldersStatus.className = "status";
+  } catch (error) {
     foldersStatus.textContent =
-      "تعذر الاتصال بقاعدة البيانات. تأكد من تشغيل supabase/schema.sql في لوحة Supabase.";
+      error?.message === "timeout"
+        ? "انتهت مهلة الاتصال بـ Supabase — يتم عرض الملفات الافتراضية."
+        : "تعذر الاتصال بـ Supabase — يتم عرض الملفات الافتراضية.";
     foldersStatus.className = "status error";
-    renderFolders();
-    return;
   }
-
-  folders = data.length ? data : DEFAULT_FOLDERS;
-  foldersStatus.textContent = data.length
-    ? "تم تحميل الملفات من Supabase."
-    : "لا توجد ملفات في Supabase بعد — يتم عرض الملفات الافتراضية.";
-  foldersStatus.className = "status success";
-  renderFolders();
 }
 
 function openFolder(folder) {
@@ -295,5 +328,14 @@ document.getElementById("back-to-categories").addEventListener("click", () => {
 document.getElementById("save-complaint").addEventListener("click", saveComplaint);
 document.getElementById("clear-complaint").addEventListener("click", clearComplaint);
 
-supabase = initSupabase();
-loadFolders();
+function boot() {
+  showView("folders");
+  supabase = initSupabase();
+  loadFolders();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", boot);
+} else {
+  boot();
+}
