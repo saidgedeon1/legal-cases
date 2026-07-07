@@ -24,10 +24,11 @@ npx serve .
 
 ## Vercel
 
-1. Push this repo to GitHub
-2. Import project in Vercel
-3. No build command needed (static HTML)
-4. Output directory: `.`
+Live site: https://legal-cases-theta.vercel.app
+
+1. Push this repo to GitHub — Vercel auto-redeploys
+2. No build command needed (static HTML)
+3. Output directory: `.`
 
 `config.js` already contains the public Supabase URL + anon key.
 
