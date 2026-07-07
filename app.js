@@ -286,11 +286,17 @@
   }
 
   function getPublicFileUrl(storagePath) {
-    if (!supabase) {
+    var config = getConfig();
+    if (!config.supabaseUrl) {
       return "#";
     }
-    var result = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath);
-    return result.data.publicUrl;
+    return (
+      config.supabaseUrl +
+      "/storage/v1/object/public/" +
+      STORAGE_BUCKET +
+      "/" +
+      storagePath
+    );
   }
 
   function getCategoryPrefix() {
@@ -351,51 +357,41 @@
       return Promise.resolve();
     }
 
-    if (!supabase) {
-      renderFileList([]);
-      setDetailStatus(storageSetupMessage(), "error");
-      return Promise.resolve();
-    }
-
     setDetailStatus("جارٍ تحميل الملفات...");
     var prefix = getCategoryPrefix();
 
-    return supabase.storage
-      .from(STORAGE_BUCKET)
-      .list(prefix, {
-        limit: 100,
-        offset: 0,
-        sortBy: { column: "created_at", order: "desc" },
+    return fetch("/api/files?prefix=" + encodeURIComponent(prefix))
+      .then(function (response) {
+        return response.json().then(function (body) {
+          return { ok: response.ok, body: body };
+        });
       })
       .then(function (result) {
-        if (result.error) {
+        if (!result.ok) {
           renderFileList([]);
-          var message = result.error.message || "";
-          if (
-            message.indexOf("Bucket not found") !== -1 ||
-            message.indexOf("bucket") !== -1
-          ) {
-            setDetailStatus(storageSetupMessage(), "error");
-          } else {
-            setDetailStatus("تعذر تحميل الملفات: " + message, "error");
-          }
+          setDetailStatus(
+            "تعذر تحميل الملفات: " + (result.body.error || "خطأ غير معروف"),
+            "error",
+          );
           return;
         }
 
-        var files = (result.data || [])
-          .filter(function (item) {
-            return item && item.name && item.metadata;
-          })
-          .map(function (item) {
-            return {
-              file_name: displayFileName(item.name),
-              storage_path: prefix + "/" + item.name,
-              size_bytes: (item.metadata && item.metadata.size) || 0,
-            };
-          });
+        var files = (result.body.files || []).map(function (item) {
+          return {
+            file_name: displayFileName(item.name),
+            storage_path: item.storage_path,
+            size_bytes: item.size_bytes || 0,
+          };
+        });
 
         renderFileList(files);
-        setDetailStatus("");
+        if (!files.length) {
+          setDetailStatus("");
+        }
+      })
+      .catch(function () {
+        renderFileList([]);
+        setDetailStatus("تعذر الاتصال بخادم الرفع.", "error");
       });
   }
 
@@ -406,14 +402,11 @@
     if (!fileList || !fileList.length) {
       return;
     }
-    if (!supabase) {
-      setDetailStatus(storageSetupMessage(), "error");
-      return;
-    }
 
     var files = Array.prototype.slice.call(fileList);
     var uploaded = 0;
     var failed = 0;
+    var errorMessages = [];
 
     setDetailStatus("جارٍ رفع " + files.length + " ملف...");
 
@@ -421,13 +414,21 @@
       if (index >= files.length) {
         if (failed === 0) {
           setDetailStatus("تم رفع " + uploaded + " ملف بنجاح.", "success");
+          setTimeout(function () {
+            loadCategoryFiles();
+          }, 400);
         } else {
           setDetailStatus(
-            "تم رفع " + uploaded + " ملف، وفشل " + failed + " ملف.",
+            "تم رفع " +
+              uploaded +
+              " ملف، وفشل " +
+              failed +
+              ". " +
+              errorMessages.join(" | "),
             "error",
           );
+          loadCategoryFiles();
         }
-        loadCategoryFiles();
         return;
       }
 
@@ -438,19 +439,30 @@
         file.name,
       );
 
-      supabase.storage
-        .from(STORAGE_BUCKET)
-        .upload(storagePath, file, {
-          cacheControl: "3600",
-          upsert: false,
-          contentType: file.type || "application/octet-stream",
+      fetch("/api/files?path=" + encodeURIComponent(storagePath), {
+        method: "POST",
+        headers: {
+          "Content-Type": file.type || "application/octet-stream",
+        },
+        body: file,
+      })
+        .then(function (response) {
+          return response.json().then(function (body) {
+            return { ok: response.ok, body: body };
+          });
         })
-        .then(function (uploadResult) {
-          if (uploadResult.error) {
+        .then(function (result) {
+          if (!result.ok) {
             failed += 1;
+            errorMessages.push(result.body.error || "فشل الرفع");
           } else {
             uploaded += 1;
           }
+          uploadNext(index + 1);
+        })
+        .catch(function () {
+          failed += 1;
+          errorMessages.push("تعذر الاتصال بخادم الرفع");
           uploadNext(index + 1);
         });
     }
@@ -459,27 +471,30 @@
   }
 
   function deleteFile(storagePath) {
-    if (!supabase) {
-      setDetailStatus("لا يمكن الحذف بدون Supabase.", "error");
-      return;
-    }
-
     if (!window.confirm("هل تريد حذف هذا الملف؟")) {
       return;
     }
 
     setDetailStatus("جارٍ حذف الملف...");
 
-    supabase.storage
-      .from(STORAGE_BUCKET)
-      .remove([storagePath])
+    fetch("/api/files?path=" + encodeURIComponent(storagePath), {
+      method: "DELETE",
+    })
+      .then(function (response) {
+        return response.json().then(function (body) {
+          return { ok: response.ok, body: body };
+        });
+      })
       .then(function (result) {
-        if (result.error) {
-          setDetailStatus("تعذر حذف الملف: " + result.error.message, "error");
+        if (!result.ok) {
+          setDetailStatus("تعذر حذف الملف: " + (result.body.error || "خطأ"), "error");
           return;
         }
         setDetailStatus("تم حذف الملف.", "success");
         loadCategoryFiles();
+      })
+      .catch(function () {
+        setDetailStatus("تعذر الاتصال بخادم الرفع.", "error");
       });
   }
 

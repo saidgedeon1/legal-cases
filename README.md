@@ -10,11 +10,21 @@ Simple Arabic RTL webpage for legal case folders.
 - Upload files in **every category** (all formats, up to 50MB each)
 - Save complaint text to Supabase
 
+## Vercel env vars (required for uploads)
+
+In Vercel → Project → Settings → Environment Variables, add:
+
+- `SUPABASE_URL` = `https://fzkdywytihenesxcaqfg.supabase.co`
+- `SUPABASE_SERVICE_ROLE_KEY` = your service role key (keep secret)
+
+Then redeploy.
+
 ## Supabase setup (one time)
 
 1. Open [Supabase SQL Editor](https://supabase.com/dashboard/project/fzkdywytihenesxcaqfg/sql/new)
-2. Paste and run `supabase/schema.sql`
-3. If you already ran an older schema, also run `supabase/files-migration.sql`
+2. Paste and run `supabase/setup-all.sql` (folders + complaints + storage policies)
+
+Or if bucket already exists, run `supabase/policies-only.sql` only.
 
 ## Local preview
 
