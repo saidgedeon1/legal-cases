@@ -243,6 +243,134 @@ h1 {
   color: #067647;
 }
 
+.section-title {
+  margin: 1.5rem 0 0.5rem;
+  font-size: 1.05rem;
+}
+
+.upload-section {
+  margin-top: 1rem;
+}
+
+.upload-hint {
+  margin: 0 0 0.85rem;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.upload-dropzone {
+  display: block;
+  padding: 1.5rem;
+  border: 2px dashed var(--border);
+  border-radius: 14px;
+  background: #fafbfd;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.upload-dropzone:hover,
+.upload-dropzone.dragover {
+  border-color: rgba(30, 77, 140, 0.45);
+  background: #f3f8ff;
+}
+
+.upload-dropzone input {
+  display: none;
+}
+
+.upload-dropzone-title {
+  display: block;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.upload-dropzone-subtitle {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.file-list {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.file-list li + li {
+  margin-top: 0.65rem;
+}
+
+.file-meta {
+  min-width: 0;
+}
+
+.file-name {
+  display: block;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.file-size {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.file-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.link-btn,
+.danger-btn {
+  border: 0;
+  border-radius: 10px;
+  padding: 0.55rem 0.8rem;
+  cursor: pointer;
+  font-size: 0.88rem;
+}
+
+.link-btn {
+  background: var(--primary-soft);
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.danger-btn {
+  background: #fdecec;
+  color: #b42318;
+}
+
+.complaint-section textarea {
+  width: 100%;
+  min-height: 180px;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  resize: vertical;
+}
+
+.complaint-section label {
+  display: block;
+  margin: 0.5rem 0 0.4rem;
+  font-weight: 600;
+}
+
 .hidden {
   display: none !important;
 }

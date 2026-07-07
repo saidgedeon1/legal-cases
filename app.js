@@ -1,6 +1,8 @@
 (function () {
   "use strict";
 
+  var STORAGE_BUCKET = "legal-case-files";
+
   var DEFAULT_FOLDERS = [
     {
       slug: "patrick-sayf",
@@ -73,6 +75,7 @@
   var supabase = null;
   var folders = DEFAULT_FOLDERS.slice();
   var selectedFolder = null;
+  var selectedCategory = null;
 
   function getConfig() {
     return window.LEGAL_CASES_CONFIG || {};
@@ -81,16 +84,20 @@
   function bindDom() {
     dom.foldersView = document.getElementById("folders-view");
     dom.categoriesView = document.getElementById("categories-view");
-    dom.complaintView = document.getElementById("complaint-view");
+    dom.categoryDetailView = document.getElementById("category-detail-view");
     dom.foldersGrid = document.getElementById("folders-grid");
     dom.categoriesGrid = document.getElementById("categories-grid");
     dom.foldersStatus = document.getElementById("folders-status");
     dom.categoriesTitle = document.getElementById("categories-title");
     dom.categoriesSubtitle = document.getElementById("categories-subtitle");
-    dom.complaintTitle = document.getElementById("complaint-title");
-    dom.complaintSubtitle = document.getElementById("complaint-subtitle");
+    dom.categoryDetailTitle = document.getElementById("category-detail-title");
+    dom.categoryDetailSubtitle = document.getElementById("category-detail-subtitle");
+    dom.categoryDetailStatus = document.getElementById("category-detail-status");
+    dom.complaintSection = document.getElementById("complaint-section");
     dom.complaintBody = document.getElementById("complaint-body");
-    dom.complaintStatus = document.getElementById("complaint-status");
+    dom.fileUploadInput = document.getElementById("file-upload-input");
+    dom.fileList = document.getElementById("file-list");
+    dom.uploadDropzone = document.querySelector(".upload-dropzone");
     dom.backToFolders = document.getElementById("back-to-folders");
     dom.backToCategories = document.getElementById("back-to-categories");
     dom.saveComplaint = document.getElementById("save-complaint");
@@ -151,7 +158,12 @@
   function showView(view) {
     dom.foldersView.classList.toggle("hidden", view !== "folders");
     dom.categoriesView.classList.toggle("hidden", view !== "categories");
-    dom.complaintView.classList.toggle("hidden", view !== "complaint");
+    dom.categoryDetailView.classList.toggle("hidden", view !== "category-detail");
+  }
+
+  function setDetailStatus(message, type) {
+    dom.categoryDetailStatus.textContent = message || "";
+    dom.categoryDetailStatus.className = "status" + (type ? " " + type : "");
   }
 
   function getCategoriesForFolder(folder) {
@@ -164,6 +176,16 @@
         featured: true,
       },
     ].concat(BASE_CATEGORIES);
+  }
+
+  function findCategory(folder, categoryId) {
+    var categories = getCategoriesForFolder(folder);
+    for (var i = 0; i < categories.length; i += 1) {
+      if (categories[i].id === categoryId) {
+        return categories[i];
+      }
+    }
+    return null;
   }
 
   function renderFolders() {
@@ -232,6 +254,220 @@
     return null;
   }
 
+  function formatFileSize(bytes) {
+    var size = Number(bytes) || 0;
+    if (size < 1024) {
+      return size + " B";
+    }
+    if (size < 1024 * 1024) {
+      return (size / 1024).toFixed(1) + " KB";
+    }
+    return (size / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
+  function sanitizeFileName(name) {
+    return String(name || "file")
+      .replace(/[^\w.\-()\s\u0600-\u06FF]/g, "_")
+      .replace(/\s+/g, "-");
+  }
+
+  function buildStoragePath(folderSlug, categoryId, fileName) {
+    return (
+      folderSlug +
+      "/" +
+      categoryId +
+      "/" +
+      Date.now() +
+      "-" +
+      Math.random().toString(36).slice(2, 8) +
+      "-" +
+      sanitizeFileName(fileName)
+    );
+  }
+
+  function getPublicFileUrl(storagePath) {
+    if (!supabase) {
+      return "#";
+    }
+    var result = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath);
+    return result.data.publicUrl;
+  }
+
+  function renderFileList(files) {
+    if (!files || !files.length) {
+      dom.fileList.innerHTML =
+        '<li class="file-item"><span class="file-meta"><span class="file-name">لا توجد ملفات مرفوعة بعد.</span></span></li>';
+      return;
+    }
+
+    dom.fileList.innerHTML = files
+      .map(function (file) {
+        var url = getPublicFileUrl(file.storage_path);
+        return (
+          '<li class="file-item" data-file-id="' +
+          file.id +
+          '">' +
+          '<div class="file-meta">' +
+          '<span class="file-name">' +
+          file.file_name +
+          "</span>" +
+          '<span class="file-size">' +
+          formatFileSize(file.size_bytes) +
+          "</span>" +
+          "</div>" +
+          '<div class="file-actions">' +
+          '<a class="link-btn" href="' +
+          url +
+          '" target="_blank" rel="noopener">فتح</a>' +
+          '<button class="danger-btn" type="button" data-delete-file="' +
+          file.id +
+          '" data-storage-path="' +
+          file.storage_path +
+          '">حذف</button>' +
+          "</div>" +
+          "</li>"
+        );
+      })
+      .join("");
+  }
+
+  function loadCategoryFiles() {
+    if (!selectedFolder || !selectedCategory) {
+      return Promise.resolve();
+    }
+
+    if (!supabase) {
+      renderFileList([]);
+      setDetailStatus("شغّل supabase/schema.sql في Supabase لرفع الملفات.", "error");
+      return Promise.resolve();
+    }
+
+    setDetailStatus("جارٍ تحميل الملفات...");
+
+    return supabase
+      .from("case_files")
+      .select("id, file_name, storage_path, mime_type, size_bytes, created_at")
+      .eq("folder_slug", selectedFolder.slug)
+      .eq("category_id", selectedCategory.id)
+      .order("created_at", { ascending: false })
+      .then(function (result) {
+        if (result.error) {
+          renderFileList([]);
+          setDetailStatus("تعذر تحميل الملفات: " + result.error.message, "error");
+          return;
+        }
+
+        renderFileList(result.data || []);
+        setDetailStatus("");
+      });
+  }
+
+  function uploadFiles(fileList) {
+    if (!selectedFolder || !selectedCategory) {
+      return;
+    }
+    if (!fileList || !fileList.length) {
+      return;
+    }
+    if (!supabase) {
+      setDetailStatus("شغّل supabase/schema.sql في Supabase لرفع الملفات.", "error");
+      return;
+    }
+
+    var files = Array.prototype.slice.call(fileList);
+    var uploaded = 0;
+    var failed = 0;
+
+    setDetailStatus("جارٍ رفع " + files.length + " ملف...");
+
+    function uploadNext(index) {
+      if (index >= files.length) {
+        if (failed === 0) {
+          setDetailStatus("تم رفع " + uploaded + " ملف بنجاح.", "success");
+        } else {
+          setDetailStatus(
+            "تم رفع " + uploaded + " ملف، وفشل " + failed + " ملف.",
+            "error",
+          );
+        }
+        loadCategoryFiles();
+        return;
+      }
+
+      var file = files[index];
+      var storagePath = buildStoragePath(
+        selectedFolder.slug,
+        selectedCategory.id,
+        file.name,
+      );
+
+      supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(storagePath, file, {
+          cacheControl: "3600",
+          upsert: false,
+          contentType: file.type || "application/octet-stream",
+        })
+        .then(function (uploadResult) {
+          if (uploadResult.error) {
+            failed += 1;
+            uploadNext(index + 1);
+            return;
+          }
+
+          supabase
+            .from("case_files")
+            .insert({
+              folder_id: selectedFolder.id || null,
+              folder_slug: selectedFolder.slug,
+              category_id: selectedCategory.id,
+              file_name: file.name,
+              storage_path: storagePath,
+              mime_type: file.type || null,
+              size_bytes: file.size || 0,
+            })
+            .then(function (dbResult) {
+              if (dbResult.error) {
+                failed += 1;
+              } else {
+                uploaded += 1;
+              }
+              uploadNext(index + 1);
+            });
+        });
+    }
+
+    uploadNext(0);
+  }
+
+  function deleteFile(fileId, storagePath) {
+    if (!supabase) {
+      setDetailStatus("لا يمكن الحذف بدون Supabase.", "error");
+      return;
+    }
+
+    if (!window.confirm("هل تريد حذف هذا الملف؟")) {
+      return;
+    }
+
+    setDetailStatus("جارٍ حذف الملف...");
+
+    supabase.storage
+      .from(STORAGE_BUCKET)
+      .remove([storagePath])
+      .then(function () {
+        return supabase.from("case_files").delete().eq("id", fileId);
+      })
+      .then(function (result) {
+        if (result.error) {
+          setDetailStatus("تعذر حذف الملف: " + result.error.message, "error");
+          return;
+        }
+        setDetailStatus("تم حذف الملف.", "success");
+        loadCategoryFiles();
+      });
+  }
+
   function syncFoldersFromSupabase() {
     if (!supabase) {
       dom.foldersStatus.textContent =
@@ -283,53 +519,60 @@
     showView("categories");
   }
 
-  function openComplaint(folder) {
-    selectedFolder = folder;
-    dom.complaintTitle.textContent = "الشكوى من " + folder.name;
-    dom.complaintSubtitle.textContent = folder.opponent;
-    dom.complaintBody.value = "";
-    dom.complaintStatus.textContent = "جارٍ تحميل الشكوى...";
-    dom.complaintStatus.className = "status";
-    showView("complaint");
+  function loadComplaintText() {
+    if (!selectedFolder || selectedCategory.id !== "complaint") {
+      return;
+    }
 
-    if (!supabase || !folder.id) {
-      dom.complaintBody.value = localStorage.getItem("complaint:" + folder.slug) || "";
-      dom.complaintStatus.textContent = folder.id
-        ? ""
-        : "حفظ محلي — شغّل schema.sql في Supabase للحفظ السحابي.";
+    dom.complaintBody.value = "";
+
+    if (!supabase || !selectedFolder.id) {
+      dom.complaintBody.value =
+        localStorage.getItem("complaint:" + selectedFolder.slug) || "";
       return;
     }
 
     supabase
       .from("complaints")
       .select("body")
-      .eq("folder_id", folder.id)
+      .eq("folder_id", selectedFolder.id)
       .maybeSingle()
       .then(function (result) {
-        if (result.error) {
-          dom.complaintStatus.textContent = "تعذر تحميل الشكوى من Supabase.";
-          dom.complaintStatus.className = "status error";
-          return;
+        if (!result.error) {
+          dom.complaintBody.value = (result.data && result.data.body) || "";
         }
-
-        dom.complaintBody.value = (result.data && result.data.body) || "";
-        dom.complaintStatus.textContent = "";
       });
   }
 
+  function openCategory(folder, category) {
+    selectedFolder = folder;
+    selectedCategory = category;
+
+    dom.categoryDetailTitle.textContent = category.label;
+    dom.categoryDetailSubtitle.textContent = folder.name + " — " + folder.opponent;
+    dom.complaintSection.classList.toggle("hidden", category.id !== "complaint");
+    dom.fileUploadInput.value = "";
+    setDetailStatus("");
+    showView("category-detail");
+
+    if (category.id === "complaint") {
+      loadComplaintText();
+    }
+
+    loadCategoryFiles();
+  }
+
   function saveComplaint() {
-    if (!selectedFolder) {
+    if (!selectedFolder || !selectedCategory || selectedCategory.id !== "complaint") {
       return;
     }
 
     var body = dom.complaintBody.value.trim();
-    dom.complaintStatus.textContent = "جارٍ الحفظ...";
-    dom.complaintStatus.className = "status";
+    setDetailStatus("جارٍ حفظ الشكوى...");
 
     if (!supabase || !selectedFolder.id) {
       localStorage.setItem("complaint:" + selectedFolder.slug, body);
-      dom.complaintStatus.textContent = "تم الحفظ محلياً على هذا الجهاز.";
-      dom.complaintStatus.className = "status success";
+      setDetailStatus("تم حفظ نص الشكوى محلياً على هذا الجهاز.", "success");
       return;
     }
 
@@ -346,19 +589,16 @@
       )
       .then(function (result) {
         if (result.error) {
-          dom.complaintStatus.textContent = "تعذر الحفظ: " + result.error.message;
-          dom.complaintStatus.className = "status error";
+          setDetailStatus("تعذر حفظ الشكوى: " + result.error.message, "error");
           return;
         }
-
-        dom.complaintStatus.textContent = "تم حفظ الشكوى في Supabase.";
-        dom.complaintStatus.className = "status success";
+        setDetailStatus("تم حفظ نص الشكوى في Supabase.", "success");
       });
   }
 
   function clearComplaint() {
     dom.complaintBody.value = "";
-    dom.complaintStatus.textContent = "";
+    setDetailStatus("");
   }
 
   function bindEvents() {
@@ -378,9 +618,44 @@
       if (!button || !selectedFolder) {
         return;
       }
-      if (button.getAttribute("data-category-id") === "complaint") {
-        openComplaint(selectedFolder);
+      var category = findCategory(
+        selectedFolder,
+        button.getAttribute("data-category-id"),
+      );
+      if (category) {
+        openCategory(selectedFolder, category);
       }
+    });
+
+    dom.fileUploadInput.addEventListener("change", function (event) {
+      uploadFiles(event.target.files);
+      event.target.value = "";
+    });
+
+    dom.uploadDropzone.addEventListener("dragover", function (event) {
+      event.preventDefault();
+      dom.uploadDropzone.classList.add("dragover");
+    });
+
+    dom.uploadDropzone.addEventListener("dragleave", function () {
+      dom.uploadDropzone.classList.remove("dragover");
+    });
+
+    dom.uploadDropzone.addEventListener("drop", function (event) {
+      event.preventDefault();
+      dom.uploadDropzone.classList.remove("dragover");
+      uploadFiles(event.dataTransfer.files);
+    });
+
+    dom.fileList.addEventListener("click", function (event) {
+      var button = event.target.closest("[data-delete-file]");
+      if (!button) {
+        return;
+      }
+      deleteFile(
+        button.getAttribute("data-delete-file"),
+        button.getAttribute("data-storage-path"),
+      );
     });
 
     dom.backToFolders.addEventListener("click", function () {

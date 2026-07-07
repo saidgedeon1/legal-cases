@@ -7,12 +7,14 @@ Simple Arabic RTL webpage for legal case folders.
 - 4 case folders (first: **باتريك سيف**)
 - Open a folder → categories
 - First category: **الشكوى من {name}**
+- Upload files in **every category** (all formats, up to 50MB each)
 - Save complaint text to Supabase
 
 ## Supabase setup (one time)
 
 1. Open [Supabase SQL Editor](https://supabase.com/dashboard/project/fzkdywytihenesxcaqfg/sql/new)
 2. Paste and run `supabase/schema.sql`
+3. If you already ran an older schema, also run `supabase/files-migration.sql`
 
 ## Local preview
 

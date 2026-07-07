@@ -70,18 +70,33 @@
         <div id="categories-grid" class="grid grid-categories"></div>
       </section>
 
-      <section id="complaint-view" class="hidden">
+      <section id="category-detail-view" class="hidden">
         <button id="back-to-categories" class="back-btn" type="button">→ العودة إلى التصنيفات</button>
         <article class="detail-panel">
-          <h2 id="complaint-title"></h2>
-          <p id="complaint-subtitle" class="subtitle"></p>
-          <label for="complaint-body">نص الشكوى</label>
-          <textarea id="complaint-body" placeholder="اكتب نص الشكوى هنا..."></textarea>
-          <div class="actions">
-            <button id="save-complaint" class="primary-btn" type="button">حفظ الشكوى</button>
-            <button id="clear-complaint" class="secondary-btn" type="button">مسح</button>
+          <h2 id="category-detail-title"></h2>
+          <p id="category-detail-subtitle" class="subtitle"></p>
+
+          <div id="complaint-section" class="complaint-section hidden">
+            <label for="complaint-body">نص الشكوى</label>
+            <textarea id="complaint-body" placeholder="اكتب نص الشكوى هنا..."></textarea>
+            <div class="actions">
+              <button id="save-complaint" class="primary-btn" type="button">حفظ الشكوى</button>
+              <button id="clear-complaint" class="secondary-btn" type="button">مسح النص</button>
+            </div>
           </div>
-          <p id="complaint-status" class="status"></p>
+
+          <div class="upload-section">
+            <h3 class="section-title">رفع الملفات</h3>
+            <p class="upload-hint">جميع الصيغ مدعومة: PDF، Word، صور، فيديو، ZIP، وغيرها.</p>
+            <label class="upload-dropzone" for="file-upload-input">
+              <input id="file-upload-input" type="file" multiple />
+              <span class="upload-dropzone-title">اضغط أو اسحب الملفات هنا</span>
+              <span class="upload-dropzone-subtitle">يمكنك اختيار أكثر من ملف في المرة الواحدة</span>
+            </label>
+            <ul id="file-list" class="file-list"></ul>
+          </div>
+
+          <p id="category-detail-status" class="status"></p>
         </article>
       </section>
     </main>
